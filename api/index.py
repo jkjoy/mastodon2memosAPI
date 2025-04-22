@@ -45,7 +45,7 @@ class MemoRelation(BaseModel):
     targetId: int = 0
 
 class Memo(BaseModel):
-    id: int = Field(..., description="Mastodon status ID")
+    id: str = Field(..., description="Mastodon status ID (强制字符串避免精度问题)")
     creatorId: int = Field(..., description="Mastodon account ID")
     creatorName: str = Field(..., description="Mastodon display name")
     creatorUsername: str = Field(..., description="Mastodon username")
@@ -127,6 +127,8 @@ def datetime_to_timestamp(dt_str: str) -> int:
 def convert_mastodon_to_memo(mastodon_post: Dict[Any, Any]) -> Memo:
     """将Mastodon帖子转换为Memo格式"""
     try:
+        # 确保 mastodon_post['id'] 是字符串（如果不是，强制转换）
+        post_id = str(mastodon_post['id'])  # 关键修改：无论如何都转成 str
         content = clean_html_content(mastodon_post['content'])
         created_ts = datetime_to_timestamp(mastodon_post['created_at'])
         account = mastodon_post['account']
@@ -141,8 +143,8 @@ def convert_mastodon_to_memo(mastodon_post: Dict[Any, Any]) -> Memo:
             ))
         
         return Memo(
-            id=str(mastodon_post['id']),  # 修改：强制转为字符串，避免 JSON 大整数精度问题
-            creatorId=1,  # 强制设置为1
+            id=post_id,  # 使用强制转换后的字符串
+            creatorId=1,
             creatorName=account['display_name'],
             creatorUsername=account['username'],
             createdTs=created_ts,
