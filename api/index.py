@@ -141,7 +141,7 @@ def convert_mastodon_to_memo(mastodon_post: Dict[Any, Any]) -> Memo:
             ))
         
         return Memo(
-            id=int(mastodon_post['id']),
+            id=str(mastodon_post['id']),  # 修改：强制转为字符串，避免 JSON 大整数精度问题
             creatorId=1,  # 强制设置为1
             creatorName=account['display_name'],
             creatorUsername=account['username'],
