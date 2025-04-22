@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
@@ -23,8 +23,9 @@ class Settings(BaseSettings):
     MASTODON_ACCOUNT_ID: str = os.getenv("MASTODON_ACCOUNT_ID", "110710864910866001")
     MAX_RETRIES: int = 3
     TIMEOUT: int = 10
-    DEFAULT_PAGE_SIZE: int = 50
-    MAX_PAGE_SIZE: int = 100
+    DEFAULT_PAGE_SIZE: int = 80  # 修改默认值为Mastodon单次请求最大值
+    MAX_PAGE_SIZE: int = 80     # Mastodon单次请求最多80条
+    MAX_PAGES: int = 5          # 最大分页数
 
     @property
     def MASTODON_API_PATH(self) -> str:
@@ -129,9 +130,7 @@ def convert_mastodon_to_memo(mastodon_post: Dict[Any, Any]) -> Memo:
     try:
         # 确保 mastodon_post['id'] 是字符串（如果不是，强制转换）
         post_id = str(mastodon_post['id'])  # 关键修改：无论如何都转成 str
-        # 清理HTML内容
         content = clean_html_content(mastodon_post['content'])
-        # 将创建时间转换为时间戳
         created_ts = datetime_to_timestamp(mastodon_post['created_at'])
         account = mastodon_post['account']
         
@@ -163,6 +162,45 @@ def convert_mastodon_to_memo(mastodon_post: Dict[Any, Any]) -> Memo:
         logger.error(f"Error converting post: {e}")
         raise HTTPException(status_code=500, detail="Conversion error")
 
+async def fetch_all_mastodon_posts(
+    max_pages: int = settings.MAX_PAGES,
+    exclude_replies: bool = True,
+    exclude_reblogs: bool = True
+) -> List[Dict[str, Any]]:
+    """获取所有Mastodon帖子（支持分页）"""
+    all_posts = []
+    max_id = None
+    
+    async with httpx.AsyncClient() as client:
+        for _ in range(max_pages):
+            params = {
+                'limit': settings.MAX_PAGE_SIZE,
+                'exclude_replies': exclude_replies,
+                'exclude_reblogs': exclude_reblogs
+            }
+            if max_id:
+                params['max_id'] = max_id
+                
+            try:
+                response = await client.get(
+                    f"{settings.MASTODON_BASE_URL}{settings.MASTODON_API_PATH}",
+                    params=params,
+                    timeout=settings.TIMEOUT
+                )
+                response.raise_for_status()
+                posts = response.json()
+                if not posts:
+                    break
+                    
+                all_posts.extend(posts)
+                max_id = posts[-1]['id']  # 设置下一页的max_id
+                
+            except Exception as e:
+                logger.error(f"Error fetching posts: {e}")
+                break
+                
+    return all_posts
+
 @app.get("/api/v1/status")
 async def get_status():
     """获取系统状态"""
@@ -181,40 +219,40 @@ async def get_status():
 async def get_memos(
     creatorId: Optional[int] = None,
     rowStatus: Optional[str] = "NORMAL",
-    limit: Optional[int] = None
+    limit: Optional[int] = None,
+    exclude_replies: bool = Query(True, description="是否排除回复嘟文"),
+    exclude_reblogs: bool = Query(True, description="是否排除转发嘟文")
 ):
-    """获取 Memos 列表"""
-    async with httpx.AsyncClient() as client:
-        try:
-            actual_limit = min(limit or settings.DEFAULT_PAGE_SIZE, settings.MAX_PAGE_SIZE)
-            
-            response = await client.get(
-                f"{settings.MASTODON_BASE_URL}{settings.MASTODON_API_PATH}",
-                params={'limit': actual_limit},
-                timeout=settings.TIMEOUT
-            )
-            response.raise_for_status()
-            mastodon_posts = response.json()
-            
-            memos = []
-            for post in mastodon_posts:
-                try:
-                    memo = convert_mastodon_to_memo(post)
-                    if (not creatorId or memo.creatorId == creatorId) and \
-                       (not rowStatus or memo.rowStatus == rowStatus):
-                        memos.append(memo)
-                except Exception as e:
-                    logger.error(f"Error processing post {post.get('id')}: {e}")
-                    continue
-            
-            return memos[:actual_limit]
+    """获取 Memos 列表（支持分页和过滤）"""
+    try:
+        # 获取所有符合条件的嘟文
+        mastodon_posts = await fetch_all_mastodon_posts(
+            exclude_replies=exclude_replies,
+            exclude_reblogs=exclude_reblogs
+        )
+        
+        # 转换为Memo格式并过滤
+        memos = []
+        for post in mastodon_posts:
+            try:
+                memo = convert_mastodon_to_memo(post)
+                if (not creatorId or memo.creatorId == creatorId) and \
+                   (not rowStatus or memo.rowStatus == rowStatus):
+                    memos.append(memo)
+            except Exception as e:
+                logger.error(f"Error processing post {post.get('id')}: {e}")
+                continue
+        
+        # 应用limit限制
+        actual_limit = min(limit or len(memos), settings.MAX_PAGE_SIZE * settings.MAX_PAGES)
+        return memos[:actual_limit]
 
-        except httpx.HTTPError as e:
-            logger.error(f"HTTP error occurred: {e}")
-            raise HTTPException(status_code=502, detail="Error fetching Mastodon posts")
-        except Exception as e:
-            logger.error(f"Unexpected error: {e}")
-            raise HTTPException(status_code=500, detail="Internal server error")
+    except httpx.HTTPError as e:
+        logger.error(f"HTTP error occurred: {e}")
+        raise HTTPException(status_code=502, detail="Error fetching Mastodon posts")
+    except Exception as e:
+        logger.error(f"Unexpected error: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.get("/m/{post_id}")
 async def redirect_to_mastodon(post_id: str):
