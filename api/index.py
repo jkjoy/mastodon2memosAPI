@@ -142,7 +142,7 @@ def convert_mastodon_to_memo(mastodon_post: Dict[Any, Any]) -> Memo:
         
         return Memo(
             id=int(mastodon_post['id']),
-            creatorId=int(account['id']),
+            creatorId=1,  # 强制设置为1
             creatorName=account['display_name'],
             creatorUsername=account['username'],
             createdTs=created_ts,
