@@ -1,6 +1,8 @@
 # mastodon2memosAPI
 
-转换mastodon的API为memos v0.18.0 的标准API
+转换mastodon的API为memos v0.18.0 的标准API用以适配木木老师的MemosBBS 项目
+
+## 介绍
 
 ```
 id=int(mastodon_post['id']), # mastodon的嘟文ID
@@ -31,4 +33,5 @@ rowStatus="NORMAL" # 嘟文的状态
 3. 修改Vercel环境变量
    - MASTODON_BASE_URL: mastodon的实例地址
    - MASTODON_ACCOUNT_ID: 你的mastodon账户ID
+   - MASTODON_ACCESS_TOKEN: your_access_token (Gotosocial必须)
 4. 部署完成

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Request, Query
+from fastapi import FastAPI, HTTPException, Request, Query, Header
 from fastapi.responses import RedirectResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
@@ -21,6 +21,7 @@ logger = logging.getLogger(__name__)
 class Settings(BaseSettings):
     MASTODON_BASE_URL: str = os.getenv("MASTODON_BASE_URL", "https://jiong.us")
     MASTODON_ACCOUNT_ID: str = os.getenv("MASTODON_ACCOUNT_ID", "110710864910866001")
+    MASTODON_ACCESS_TOKEN: str = os.getenv("MASTODON_ACCESS_TOKEN", "")  # 新增: API访问令牌
     MAX_RETRIES: int = 3
     TIMEOUT: int = 10
     DEFAULT_PAGE_SIZE: int = 80  # 修改默认值为Mastodon单次请求最大值
@@ -81,12 +82,20 @@ async def get_mastodon_account_info() -> Dict[str, Any]:
     """获取 Mastodon 账户信息"""
     async with httpx.AsyncClient() as client:
         try:
+            headers = {"Authorization": f"Bearer {settings.MASTODON_ACCESS_TOKEN}"}
             response = await client.get(
                 f"{settings.MASTODON_BASE_URL}/api/v1/accounts/{settings.MASTODON_ACCOUNT_ID}",
+                headers=headers,
                 timeout=settings.TIMEOUT
             )
             response.raise_for_status()
             return response.json()
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                logger.error("Authentication failed: Invalid token")
+                raise HTTPException(status_code=401, detail="Authentication failed")
+            logger.error(f"Error fetching account info: {e}")
+            raise HTTPException(status_code=e.response.status_code, detail="Failed to fetch account info")
         except Exception as e:
             logger.error(f"Error fetching account info: {e}")
             return {"username": "unknown", "display_name": "Unknown User"}
@@ -182,9 +191,11 @@ async def fetch_all_mastodon_posts(
                 params['max_id'] = max_id
                 
             try:
+                headers = {"Authorization": f"Bearer {settings.MASTODON_ACCESS_TOKEN}"}
                 response = await client.get(
                     f"{settings.MASTODON_BASE_URL}{settings.MASTODON_API_PATH}",
                     params=params,
+                    headers=headers,
                     timeout=settings.TIMEOUT
                 )
                 response.raise_for_status()
@@ -195,6 +206,12 @@ async def fetch_all_mastodon_posts(
                 all_posts.extend(posts)
                 max_id = posts[-1]['id']  # 设置下一页的max_id
                 
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 401:
+                    logger.error("Authentication failed: Invalid token")
+                    raise HTTPException(status_code=401, detail="Authentication failed")
+                logger.error(f"Error fetching posts: {e}")
+                break
             except Exception as e:
                 logger.error(f"Error fetching posts: {e}")
                 break
@@ -269,15 +286,21 @@ async def get_memo(memo_id: str):
     """获取单个 Memo"""
     async with httpx.AsyncClient() as client:
         try:
+            headers = {"Authorization": f"Bearer {settings.MASTODON_ACCESS_TOKEN}"}
             response = await client.get(
                 f"{settings.MASTODON_BASE_URL}/api/v1/statuses/{memo_id}",
+                headers=headers,
                 timeout=settings.TIMEOUT
             )
             response.raise_for_status()
             mastodon_post = response.json()
             return convert_mastodon_to_memo(mastodon_post)
-        except httpx.HTTPError:
-            raise HTTPException(status_code=404, detail="Memo not found")
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 401:
+                raise HTTPException(status_code=401, detail="Authentication failed")
+            elif e.response.status_code == 404:
+                raise HTTPException(status_code=404, detail="Memo not found")
+            raise HTTPException(status_code=e.response.status_code, detail="Failed to fetch memo")
         except Exception as e:
             logger.error(f"Error fetching memo: {e}")
             raise HTTPException(status_code=500, detail="Internal server error")
