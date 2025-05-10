@@ -31,7 +31,8 @@ rowStatus="NORMAL" # 嘟文的状态
 2. 导入到vercel
 
 3. 修改Vercel环境变量
-   - MASTODON_BASE_URL: mastodon的实例地址
-   - MASTODON_ACCOUNT_ID: 你的mastodon账户ID
-   - MASTODON_ACCESS_TOKEN: your_access_token (Gotosocial必须)
+   - `MASTODON_BASE_URL`: mastodon的实例地址
+   - `MASTODON_ACCOUNT_ID`: 你的mastodon账户ID
+   - `MASTODON_ACCESS_TOKEN`: your_access_token (Gotosocial必须)
+   - `INSTANCE_TYPE` : mastodon  # 可选值: `mastodon`, `gotosocial`, `pleroma`,默认为`mastodon`
 4. 部署完成

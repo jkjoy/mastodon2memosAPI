@@ -10,6 +10,8 @@ from pydantic import BaseModel, Field
 from bs4 import BeautifulSoup
 import os
 from pydantic_settings import BaseSettings
+from enum import Enum
+from typing import Literal
 
 # 配置日志
 logging.basicConfig(
@@ -18,10 +20,17 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# 添加实例类型枚举
+class InstanceType(str, Enum):
+    MASTODON = "mastodon"
+    GOTOSOCIAL = "gotosocial"
+    PLEROMA = "pleroma"
+    
 class Settings(BaseSettings):
     MASTODON_BASE_URL: str = os.getenv("MASTODON_BASE_URL", "https://jiong.us")
     MASTODON_ACCOUNT_ID: str = os.getenv("MASTODON_ACCOUNT_ID", "110710864910866001")
     MASTODON_ACCESS_TOKEN: str = os.getenv("MASTODON_ACCESS_TOKEN", "")  # 新增: API访问令牌
+    INSTANCE_TYPE: InstanceType = os.getenv("INSTANCE_TYPE", InstanceType.MASTODON)  # 新增实例类型    
     MAX_RETRIES: int = 3
     TIMEOUT: int = 10
     DEFAULT_PAGE_SIZE: int = 80  # 修改默认值为Mastodon单次请求最大值
@@ -34,6 +43,7 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        use_enum_values = True  # 确保枚举值正确序列化
 
 settings = Settings()
 
@@ -77,6 +87,7 @@ async def startup_event():
     logger.info("Starting Mastodon to Memos API Bridge")
     logger.info(f"MASTODON_BASE_URL: {settings.MASTODON_BASE_URL}")
     logger.info(f"MASTODON_ACCOUNT_ID: {settings.MASTODON_ACCOUNT_ID}")
+    logger.info(f"INSTANCE_TYPE: {settings.INSTANCE_TYPE}")
 
 async def get_mastodon_account_info() -> Dict[str, Any]:
     """获取 Mastodon 账户信息"""
@@ -278,7 +289,16 @@ async def redirect_to_mastodon(post_id: str):
         raise HTTPException(status_code=400, detail="Invalid post ID")
     
     account_info = await get_mastodon_account_info()
-    redirect_url = f"{settings.MASTODON_BASE_URL}/@{account_info.get('username', 'unknown')}/{post_id}"
+    username = account_info.get('username', 'unknown')
+    
+    # 根据实例类型构建不同的URL格式
+    if settings.INSTANCE_TYPE == InstanceType.GOTOSOCIAL:
+        redirect_url = f"{settings.MASTODON_BASE_URL}/@{username}/statuses/{post_id}"
+    elif settings.INSTANCE_TYPE == InstanceType.PLEROMA:
+        redirect_url = f"{settings.MASTODON_BASE_URL}/@{username}/posts/{post_id}"
+    else:  # MASTODON (默认)
+        redirect_url = f"{settings.MASTODON_BASE_URL}/@{username}/{post_id}"
+    
     return RedirectResponse(url=redirect_url)
 
 @app.get("/api/v1/memo/{memo_id}", response_model=Memo)
