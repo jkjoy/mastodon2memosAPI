@@ -285,21 +285,27 @@ async def get_memos(
 @app.get("/m/{post_id}")
 async def redirect_to_mastodon(post_id: str):
     """重定向到 Mastodon 帖子"""
-    if not post_id.isdigit():
-        raise HTTPException(status_code=400, detail="Invalid post ID")
+    # 移除 isdigit 检查，因为 GoToSocial 使用 Snowflake ID
+    # if not post_id.isdigit():
+    #     raise HTTPException(status_code=400, detail="Invalid post ID")
     
-    account_info = await get_mastodon_account_info()
-    username = account_info.get('username', 'unknown')
-    
-    # 根据实例类型构建不同的URL格式
-    if settings.INSTANCE_TYPE == InstanceType.GOTOSOCIAL:
-        redirect_url = f"{settings.MASTODON_BASE_URL}/@{username}/statuses/{post_id}"
-    elif settings.INSTANCE_TYPE == InstanceType.PLEROMA:
-        redirect_url = f"{settings.MASTODON_BASE_URL}/@{username}/posts/{post_id}"
-    else:  # MASTODON (默认)
-        redirect_url = f"{settings.MASTODON_BASE_URL}/@{username}/{post_id}"
-    
-    return RedirectResponse(url=redirect_url)
+    try:
+        account_info = await get_mastodon_account_info()
+        username = account_info.get('username', 'unknown')
+        
+        # 根据实例类型构建不同的URL格式
+        if settings.INSTANCE_TYPE == InstanceType.GOTOSOCIAL:
+            redirect_url = f"{settings.MASTODON_BASE_URL}/@{username}/statuses/{post_id}"
+        elif settings.INSTANCE_TYPE == InstanceType.PLEROMA:
+            redirect_url = f"{settings.MASTODON_BASE_URL}/@{username}/posts/{post_id}"
+        else:  # MASTODON (默认)
+            redirect_url = f"{settings.MASTODON_BASE_URL}/@{username}/{post_id}"
+        
+        logger.info(f"Redirecting to: {redirect_url}")
+        return RedirectResponse(url=redirect_url)
+    except Exception as e:
+        logger.error(f"Error in redirect_to_mastodon: {e}")
+        raise HTTPException(status_code=500, detail="Error processing redirect")
 
 @app.get("/api/v1/memo/{memo_id}", response_model=Memo)
 async def get_memo(memo_id: str):
