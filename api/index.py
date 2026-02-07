@@ -262,7 +262,10 @@ async def get_memos_rss_xml():
                 follow_redirects=True,
             )
             rss_response.raise_for_status()
-            return Response(content=rss_response.content, media_type="application/rss+xml")
+            content_type = rss_response.headers.get("content-type", "application/rss+xml; charset=utf-8")
+            if "charset=" not in content_type.lower():
+                content_type = f"{content_type}; charset=utf-8"
+            return Response(content=rss_response.content, headers={"Content-Type": content_type})
         except httpx.HTTPStatusError as e:
             logger.error(f"Error fetching RSS feed: {e}")
             raise HTTPException(status_code=e.response.status_code, detail="Failed to fetch RSS feed")

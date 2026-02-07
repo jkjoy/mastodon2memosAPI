@@ -1,1 +1,5 @@
 .vercel
+*.xml
+/api/__pycache__
+/api/__pycache__
+api/__pycache__/index.cpython-313.pyc
