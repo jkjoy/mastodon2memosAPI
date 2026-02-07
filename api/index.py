@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Request, Query, Header
-from fastapi.responses import RedirectResponse, JSONResponse
+from fastapi.responses import RedirectResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 import httpx
 from datetime import datetime, timezone
@@ -248,6 +248,27 @@ async def get_status():
 async def redirect_mastodon_rss():
     """Redirect Mastodon RSS path to Memos RSS path"""
     return RedirectResponse(url="/u/1/rss.xml", status_code=301)
+
+@app.get("/u/1/rss.xml")
+async def get_memos_rss_xml():
+    """Serve Memos-compatible RSS by proxying Mastodon RSS"""
+    rss_url = f"{settings.MASTODON_BASE_URL.rstrip('/')}/@{settings.RSS_USERNAME}.rss"
+
+    async with httpx.AsyncClient() as client:
+        try:
+            rss_response = await client.get(
+                rss_url,
+                timeout=settings.TIMEOUT,
+                follow_redirects=True,
+            )
+            rss_response.raise_for_status()
+            return Response(content=rss_response.content, media_type="application/rss+xml")
+        except httpx.HTTPStatusError as e:
+            logger.error(f"Error fetching RSS feed: {e}")
+            raise HTTPException(status_code=e.response.status_code, detail="Failed to fetch RSS feed")
+        except Exception as e:
+            logger.error(f"Error proxying RSS feed: {e}")
+            raise HTTPException(status_code=502, detail="Error proxying RSS feed")
 
 @app.get("/api/v1/memo", response_model=List[Memo])
 async def get_memos(
