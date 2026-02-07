@@ -29,6 +29,7 @@ class InstanceType(str, Enum):
 class Settings(BaseSettings):
     MASTODON_BASE_URL: str = os.getenv("MASTODON_BASE_URL", "https://jiong.us")
     MASTODON_ACCOUNT_ID: str = os.getenv("MASTODON_ACCOUNT_ID", "110710864910866001")
+    RSS_USERNAME: str = os.getenv("RSS_USERNAME", "sun").strip() or "sun"
     MASTODON_ACCESS_TOKEN: str = os.getenv("MASTODON_ACCESS_TOKEN", "")  # 新增: API访问令牌
     INSTANCE_TYPE: InstanceType = os.getenv("INSTANCE_TYPE", InstanceType.MASTODON)  # 新增实例类型    
     MAX_RETRIES: int = 3
@@ -242,6 +243,11 @@ async def get_status():
     except Exception as e:
         logger.error(f"Error in get_status: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get(f"/@{settings.RSS_USERNAME}.rss")
+async def redirect_mastodon_rss():
+    """Redirect Mastodon RSS path to Memos RSS path"""
+    return RedirectResponse(url="/u/1/rss.xml", status_code=301)
 
 @app.get("/api/v1/memo", response_model=List[Memo])
 async def get_memos(

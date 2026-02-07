@@ -1,23 +1,34 @@
 # mastodon2memosAPI
 
-使用python实现转换mastodon的API为memos v0.18.0 的标准API用以适配木木老师的MemosBBS 项目,支持部署在vercel上。
+使用 Python 将 Mastodon / GoToSocial / Pleroma 的状态数据转换为 Memos v0.18.0 可用的 API，并可部署到 Vercel。
 
-## 介绍
+## 功能
 
- 
-实现功能 
-访问 `/api/v1/memo` 可返回mastodon的嘟文
-访问 `/m/{memoID}`  可跳转到对应的嘟文
+- 访问 `/api/v1/memo`：返回转换后的 memo 列表
+- 访问 `/api/v1/memo/{memo_id}`：返回单条 memo
+- 访问 `/m/{memoID}`：跳转到对应原帖
+- 访问 `/@{RSS_USERNAME}.rss`：301 重定向到 `/u/1/rss.xml`
 
-## 使用
+## 部署（Vercel）
 
-在vercel上部署
-1. fork本项目
-2. 导入到vercel
+1. Fork 本仓库
+2. 导入到 Vercel
+3. 配置环境变量
 
-3. 修改Vercel环境变量
-   - `MASTODON_BASE_URL`: mastodon的实例地址
-   - `MASTODON_ACCOUNT_ID`: 你的mastodon账户ID
-   - `MASTODON_ACCESS_TOKEN`: your_access_token 
-   - `INSTANCE_TYPE` : mastodon  # 可选值: `mastodon`, `gotosocial`, `pleroma`,默认为`mastodon`
-4. 部署完成
+- `MASTODON_BASE_URL`：实例地址（如 `https://jiong.us`）
+- `MASTODON_ACCOUNT_ID`：账号 ID
+- `MASTODON_ACCESS_TOKEN`：访问令牌
+- `INSTANCE_TYPE`：`mastodon` / `gotosocial` / `pleroma`（默认 `mastodon`）
+- `RSS_USERNAME`：RSS 重定向用户名（默认 `sun`）
+
+## RSS 重定向说明
+
+- 当 `RSS_USERNAME=sun` 时，路径 `@sun.rss` 会被重定向到 `/u/1/rss.xml`
+- 修改 `RSS_USERNAME` 后，重定向入口会变为对应用户名
+
+## 本地开发
+
+1. 复制 `.env.exm` 为 `.env`
+2. 安装依赖：`pip install -r requirements.txt`
+3. 运行：`uvicorn api.index:app --reload`
+
